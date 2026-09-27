@@ -1,0 +1,549 @@
+-- rename by prince
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local State = {
+    masterEnabled = false,
+    antiBatActive = true,
+    freezeOthers = false,
+    flingEngine = false,
+    antiDieEnabled = false,
+    isMinimized = false,
+    rangeValue = 28,
+    evasionMode = "ORBITAL",
+}
+
+local FULL_HEIGHT = 340
+local MINI_HEIGHT = 40
+
+local GREEN = Color3.fromRGB(0, 255, 100)
+local BLACK = Color3.fromRGB(0, 0, 0)
+
+local antiDieHealthConn, antiDieDiedConn, antiDieHeartbeatConn = nil, nil, nil
+local antiBatConn = nil
+local lastSafeCFrame, lastCheckTime = nil, 0
+local freezeConn, flingConn = nil, nil
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "MainGui"
+screenGui.DisplayOrder = 100
+screenGui.Enabled = true
+screenGui.IgnoreGuiInset = true
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = PlayerGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Active = true
+mainFrame.BackgroundColor3 = BLACK
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Position = UDim2.new(0.5, 179, 0.5, -200)
+mainFrame.Size = UDim2.new(0, 300, 0, FULL_HEIGHT)
+mainFrame.ZIndex = 10
+mainFrame.Parent = screenGui
+
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 16)
+
+local frameStroke = Instance.new("UIStroke")
+frameStroke.Color = GREEN
+frameStroke.Thickness = 1.4
+frameStroke.Transparency = 0.25
+frameStroke.Parent = mainFrame
+
+local gradient = Instance.new("UIGradient")
+gradient.Rotation = 193.9317
+gradient.Parent = frameStroke
+
+local headerFrame = Instance.new("Frame")
+headerFrame.BackgroundTransparency = 1
+headerFrame.Size = UDim2.new(1, 0, 0, 40)
+headerFrame.ZIndex = 11
+headerFrame.Parent = mainFrame
+
+local iconFrame = Instance.new("Frame")
+iconFrame.BackgroundColor3 = GREEN
+iconFrame.Position = UDim2.new(0, 14, 0, 16)
+iconFrame.Size = UDim2.new(0, 8, 0, 8)
+iconFrame.ZIndex = 12
+iconFrame.Parent = headerFrame
+Instance.new("UICorner", iconFrame).CornerRadius = UDim.new(0, 8)
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.BackgroundTransparency = 1
+titleLabel.Position = UDim2.new(0, 30, 0, 4)
+titleLabel.Size = UDim2.new(1, -70, 0, 20)
+titleLabel.Font = Enum.Font.GothamBlack
+titleLabel.Text = "Anti-Bat Shield"
+titleLabel.TextColor3 = Color3.fromRGB(245, 247, 255)
+titleLabel.TextSize = 11
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.ZIndex = 12
+titleLabel.Parent = headerFrame
+
+local linkLabel = Instance.new("TextLabel")
+linkLabel.BackgroundTransparency = 1
+linkLabel.Position = UDim2.new(0, 30, 0, 22)
+linkLabel.Size = UDim2.new(1, -70, 0, 14)
+linkLabel.Font = Enum.Font.Gotham
+linkLabel.Text = "https://discord.gg/TBBAUZu8cW"
+linkLabel.TextColor3 = GREEN
+linkLabel.TextSize = 10
+linkLabel.TextXAlignment = Enum.TextXAlignment.Left
+linkLabel.ZIndex = 12
+linkLabel.Parent = headerFrame
+
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
+minimizeBtn.Position = UDim2.new(1, -36, 0, 7)
+minimizeBtn.Size = UDim2.new(0, 26, 0, 26)
+minimizeBtn.Font = Enum.Font.GothamBlack
+minimizeBtn.Text = "–"
+minimizeBtn.TextColor3 = Color3.fromRGB(245, 247, 255)
+minimizeBtn.TextSize = 16
+minimizeBtn.AutoButtonColor = false
+minimizeBtn.ZIndex = 13
+minimizeBtn.Parent = headerFrame
+Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 7)
+local minStroke = Instance.new("UIStroke")
+minStroke.Color = GREEN
+minStroke.Thickness = 1
+minStroke.Transparency = 0.4
+minStroke.Parent = minimizeBtn
+
+local containerFrame = Instance.new("Frame")
+containerFrame.BackgroundTransparency = 1
+containerFrame.Position = UDim2.new(0, 10, 0, 44)
+containerFrame.Size = UDim2.new(1, -20, 1, -50)
+containerFrame.ZIndex = 11
+containerFrame.Parent = mainFrame
+
+local layout = Instance.new("UIListLayout")
+layout.FillDirection = Enum.FillDirection.Vertical
+layout.Padding = UDim.new(0, 6)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Parent = containerFrame
+
+local function createToggleRow(layoutOrder, labelText, startsOn)
+    local row = Instance.new("Frame")
+    row.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
+    row.BorderSizePixel = 0
+    row.LayoutOrder = layoutOrder
+    row.Size = UDim2.new(1, 0, 0, 36)
+    row.ZIndex = 12
+    row.Parent = containerFrame
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 10)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = GREEN
+    stroke.Thickness = 1
+    stroke.Transparency = 0.55
+    stroke.Parent = row
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Position = UDim2.new(0, 12, 0, 0)
+    label.Size = UDim2.new(1, -70, 1, 0)
+    label.Font = Enum.Font.GothamBold
+    label.Text = labelText
+    label.TextColor3 = Color3.fromRGB(245, 247, 255)
+    label.TextSize = 12
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.ZIndex = 13
+    label.Parent = row
+
+    local track = Instance.new("Frame")
+    track.Name = "Track"
+    track.BackgroundColor3 = startsOn and Color3.fromRGB(24, 105, 52) or Color3.fromRGB(35, 39, 50)
+    track.Position = UDim2.new(1, -56, 0.5, -11)
+    track.Size = UDim2.new(0, 46, 0, 22)
+    track.ZIndex = 13
+    track.Parent = row
+    Instance.new("UICorner", track).CornerRadius = UDim.new(0, 11)
+
+    local ball = Instance.new("Frame")
+    ball.Name = "Ball"
+    ball.BackgroundColor3 = startsOn and GREEN or Color3.fromRGB(255, 255, 255)
+    ball.Position = startsOn and UDim2.new(0, 27, 0, 3) or UDim2.new(0, 3, 0, 3)
+    ball.Size = UDim2.new(0, 16, 0, 16)
+    ball.ZIndex = 14
+    ball.Parent = track
+    Instance.new("UICorner", ball).CornerRadius = UDim.new(0, 8)
+
+    local btn = Instance.new("TextButton")
+    btn.BackgroundTransparency = 1
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.Text = ""
+    btn.ZIndex = 15
+    btn.Parent = row
+
+    return row, track, ball, btn
+end
+
+local masterRow, masterTrack, masterBall, masterBtn = createToggleRow(1, "MASTER ENABLE", false)
+local antiBatRow, antiBatTrack, antiBatBall, antiBatBtn = createToggleRow(2, "Anti-Bat Shield", true)
+
+local rangeRow = Instance.new("Frame")
+rangeRow.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
+rangeRow.BorderSizePixel = 0
+rangeRow.LayoutOrder = 3
+rangeRow.Size = UDim2.new(1, 0, 0, 36)
+rangeRow.ZIndex = 12
+rangeRow.Parent = containerFrame
+Instance.new("UICorner", rangeRow).CornerRadius = UDim.new(0, 10)
+local rangeStroke = Instance.new("UIStroke")
+rangeStroke.Color = GREEN
+rangeStroke.Thickness = 1
+rangeStroke.Transparency = 0.55
+rangeStroke.Parent = rangeRow
+
+local rangeLabel = Instance.new("TextLabel")
+rangeLabel.BackgroundTransparency = 1
+rangeLabel.Position = UDim2.new(0, 12, 0, 0)
+rangeLabel.Size = UDim2.new(0.55, 0, 1, 0)
+rangeLabel.Font = Enum.Font.GothamBold
+rangeLabel.Text = "Range"
+rangeLabel.TextColor3 = Color3.fromRGB(245, 247, 255)
+rangeLabel.TextSize = 12
+rangeLabel.TextXAlignment = Enum.TextXAlignment.Left
+rangeLabel.ZIndex = 13
+rangeLabel.Parent = rangeRow
+
+local rangeBox = Instance.new("TextBox")
+rangeBox.BackgroundColor3 = Color3.fromRGB(25, 28, 36)
+rangeBox.Position = UDim2.new(1, -80, 0.5, -12)
+rangeBox.Size = UDim2.new(0, 70, 0, 24)
+rangeBox.Font = Enum.Font.GothamBold
+rangeBox.Text = "28"
+rangeBox.TextColor3 = Color3.fromRGB(245, 247, 255)
+rangeBox.TextSize = 13
+rangeBox.ClearTextOnFocus = false
+rangeBox.ZIndex = 13
+rangeBox.Parent = rangeRow
+Instance.new("UICorner", rangeBox).CornerRadius = UDim.new(0, 7)
+local boxStroke = Instance.new("UIStroke")
+boxStroke.Color = GREEN
+boxStroke.Thickness = 1
+boxStroke.Transparency = 0.4
+boxStroke.Parent = rangeBox
+
+local evasionRow = Instance.new("Frame")
+evasionRow.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
+evasionRow.BorderSizePixel = 0
+evasionRow.LayoutOrder = 4
+evasionRow.Size = UDim2.new(1, 0, 0, 36)
+evasionRow.ZIndex = 12
+evasionRow.Parent = containerFrame
+Instance.new("UICorner", evasionRow).CornerRadius = UDim.new(0, 10)
+local evasionStroke = Instance.new("UIStroke")
+evasionStroke.Color = GREEN
+evasionStroke.Thickness = 1
+evasionStroke.Transparency = 0.55
+evasionStroke.Parent = evasionRow
+
+local evasionLabel = Instance.new("TextLabel")
+evasionLabel.BackgroundTransparency = 1
+evasionLabel.Position = UDim2.new(0, 12, 0, 0)
+evasionLabel.Size = UDim2.new(0.45, 0, 1, 0)
+evasionLabel.Font = Enum.Font.GothamBold
+evasionLabel.Text = "Evasion Mode"
+evasionLabel.TextColor3 = Color3.fromRGB(245, 247, 255)
+evasionLabel.TextSize = 12
+evasionLabel.TextXAlignment = Enum.TextXAlignment.Left
+evasionLabel.ZIndex = 13
+evasionLabel.Parent = evasionRow
+
+local orbitalBtn = Instance.new("TextButton")
+orbitalBtn.BackgroundColor3 = Color3.fromRGB(30, 34, 44)
+orbitalBtn.Position = UDim2.new(1, -112, 0.5, -12)
+orbitalBtn.Size = UDim2.new(0, 100, 0, 24)
+orbitalBtn.Font = Enum.Font.GothamBold
+orbitalBtn.Text = "ORBITAL"
+orbitalBtn.TextColor3 = GREEN
+orbitalBtn.TextSize = 11
+orbitalBtn.AutoButtonColor = false
+orbitalBtn.ZIndex = 13
+orbitalBtn.Parent = evasionRow
+Instance.new("UICorner", orbitalBtn).CornerRadius = UDim.new(0, 7)
+
+local freezeRow, freezeTrack, freezeBall, freezeBtn = createToggleRow(5, "Freeze Others", false)
+local flingRow, flingTrack, flingBall, flingBtn = createToggleRow(6, "Fling Engine", false)
+local antiDieRow, antiDieTrack, antiDieBall, antiDieBtn = createToggleRow(7, "Anti-Die", false)
+
+local statusRow = Instance.new("Frame")
+statusRow.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
+statusRow.BorderSizePixel = 0
+statusRow.LayoutOrder = 8
+statusRow.Size = UDim2.new(1, 0, 0, 28)
+statusRow.ZIndex = 12
+statusRow.Parent = containerFrame
+Instance.new("UICorner", statusRow).CornerRadius = UDim.new(0, 9)
+
+local statusLabel = Instance.new("TextLabel")
+statusLabel.BackgroundTransparency = 1
+statusLabel.Size = UDim2.new(1, 0, 1, 0)
+statusLabel.Font = Enum.Font.GothamBold
+statusLabel.Text = "STATUS: OFFLINE"
+statusLabel.TextColor3 = Color3.fromRGB(145, 152, 166)
+statusLabel.TextSize = 11
+statusLabel.TextXAlignment = Enum.TextXAlignment.Center
+statusLabel.ZIndex = 13
+statusLabel.Parent = statusRow
+
+local function setToggleVisual(track, ball, isOn)
+    TweenService:Create(track, TweenInfo.new(0.2), {
+        BackgroundColor3 = isOn and Color3.fromRGB(24, 105, 52) or Color3.fromRGB(35, 39, 50)
+    }):Play()
+    TweenService:Create(ball, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = isOn and UDim2.new(0, 27, 0, 3) or UDim2.new(0, 3, 0, 3),
+        BackgroundColor3 = isOn and GREEN or Color3.fromRGB(255, 255, 255)
+    }):Play()
+end
+
+local function updateStatus()
+    if State.masterEnabled then
+        statusLabel.Text = "STATUS: ONLINE"
+        statusLabel.TextColor3 = GREEN
+    else
+        statusLabel.Text = "STATUS: OFFLINE"
+        statusLabel.TextColor3 = Color3.fromRGB(145, 152, 166)
+    end
+end
+
+local function clearAntiDieConnections()
+    if antiDieHealthConn then antiDieHealthConn:Disconnect() antiDieHealthConn = nil end
+    if antiDieDiedConn then antiDieDiedConn:Disconnect() antiDieDiedConn = nil end
+    if antiDieHeartbeatConn then antiDieHeartbeatConn:Disconnect() antiDieHeartbeatConn = nil end
+end
+
+local function bindResetButton(enabled)
+    pcall(function()
+        if enabled then
+            StarterGui:SetCore("ResetButtonCallback", function() end)
+        else
+            StarterGui:SetCore("ResetButtonCallback", true)
+        end
+    end)
+end
+
+local function protectCharacter(character)
+    clearAntiDieConnections()
+    if not (State.antiDieEnabled and State.masterEnabled) then return end
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    bindResetButton(true)
+    humanoid.Health = humanoid.MaxHealth
+    antiDieHealthConn = humanoid.HealthChanged:Connect(function(health)
+        if State.antiDieEnabled and State.masterEnabled and health < humanoid.MaxHealth then
+            humanoid.Health = humanoid.MaxHealth
+        end
+    end)
+    antiDieDiedConn = humanoid.Died:Connect(function()
+        if State.antiDieEnabled and State.masterEnabled then
+            task.defer(function()
+                if humanoid and humanoid.Parent then humanoid.Health = humanoid.MaxHealth end
+            end)
+        end
+    end)
+    antiDieHeartbeatConn = RunService.Heartbeat:Connect(function()
+        if not (State.antiDieEnabled and State.masterEnabled) then return end
+        if humanoid and humanoid.Parent then
+            if humanoid.Health < humanoid.MaxHealth then humanoid.Health = humanoid.MaxHealth end
+            if humanoid:GetState() == Enum.HumanoidStateType.Dead then
+                humanoid:ChangeState(Enum.HumanoidStateType.Running)
+                humanoid.Health = humanoid.MaxHealth
+            end
+        end
+    end)
+end
+
+local function setAntiDie(state)
+    State.antiDieEnabled = state
+    if state and State.masterEnabled then
+        bindResetButton(true)
+        if LocalPlayer.Character then protectCharacter(LocalPlayer.Character) end
+    else
+        clearAntiDieConnections()
+        bindResetButton(false)
+    end
+end
+
+local function startAntiBat()
+    if antiBatConn then antiBatConn:Disconnect() end
+    lastSafeCFrame, lastCheckTime = nil, 0
+    antiBatConn = RunService.Heartbeat:Connect(function()
+        if not (State.antiBatActive and State.masterEnabled) then return end
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health <= 0 then return end
+        local range = State.rangeValue or 28
+        local now = tick()
+        if hrp.AssemblyLinearVelocity.Magnitude < 70 then
+            lastSafeCFrame = hrp.CFrame
+            lastCheckTime = now
+        elseif hrp.AssemblyLinearVelocity.Magnitude > 110 and lastSafeCFrame and (now - lastCheckTime) < 1.5 then
+            hrp.CFrame = lastSafeCFrame * CFrame.new(0, 0.1, 0)
+        end
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character then
+                local eHrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                local tool = plr.Character:FindFirstChildWhichIsA("Tool")
+                if eHrp and tool and tool.Name:lower():find("bat") then
+                    if (hrp.Position - eHrp.Position).Magnitude < range then
+                        if State.evasionMode == "ORBITAL" then
+                            local angle = math.rad(tick() * 500)
+                            hrp.CFrame = hrp.CFrame * CFrame.new(math.sin(angle) * 3, 0, math.cos(angle) * 3)
+                        else
+                            local offset = (hrp.Position - eHrp.Position).Unit * (range + 5)
+                            hrp.CFrame = CFrame.new(eHrp.Position + offset + Vector3.new(0, 2, 0))
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function stopAntiBat()
+    if antiBatConn then antiBatConn:Disconnect() antiBatConn = nil end
+end
+
+local function startFreeze()
+    if freezeConn then freezeConn:Disconnect() end
+    freezeConn = RunService.Heartbeat:Connect(function()
+        if not (State.freezeOthers and State.masterEnabled) then return end
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character then
+                local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then hrp.AssemblyLinearVelocity = Vector3.zero hrp.AssemblyAngularVelocity = Vector3.zero end
+            end
+        end
+    end)
+end
+
+local function stopFreeze()
+    if freezeConn then freezeConn:Disconnect() freezeConn = nil end
+end
+
+local function startFling()
+    if flingConn then flingConn:Disconnect() end
+    flingConn = RunService.Heartbeat:Connect(function()
+        if not (State.flingEngine and State.masterEnabled) then return end
+        local myHrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not myHrp then return end
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character then
+                local eHrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                if eHrp and (myHrp.Position - eHrp.Position).Magnitude < (State.rangeValue or 28) then
+                    eHrp.AssemblyLinearVelocity = (eHrp.Position - myHrp.Position).Unit * 150 + Vector3.new(0, 80, 0)
+                end
+            end
+        end
+    end)
+end
+
+local function stopFling()
+    if flingConn then flingConn:Disconnect() flingConn = nil end
+end
+
+masterBtn.MouseButton1Click:Connect(function()
+    State.masterEnabled = not State.masterEnabled
+    setToggleVisual(masterTrack, masterBall, State.masterEnabled)
+    updateStatus()
+    if State.masterEnabled then
+        if State.antiBatActive then startAntiBat() end
+        if State.antiDieEnabled then setAntiDie(true) end
+        if State.freezeOthers then startFreeze() end
+        if State.flingEngine then startFling() end
+    else
+        stopAntiBat()
+        setAntiDie(false)
+        stopFreeze()
+        stopFling()
+    end
+end)
+
+antiBatBtn.MouseButton1Click:Connect(function()
+    State.antiBatActive = not State.antiBatActive
+    setToggleVisual(antiBatTrack, antiBatBall, State.antiBatActive)
+    if State.antiBatActive and State.masterEnabled then startAntiBat() else stopAntiBat() end
+end)
+
+rangeBox.FocusLost:Connect(function()
+    State.rangeValue = math.clamp(tonumber(rangeBox.Text) or 28, 1, 500)
+    rangeBox.Text = tostring(State.rangeValue)
+end)
+
+orbitalBtn.MouseButton1Click:Connect(function()
+    State.evasionMode = (State.evasionMode == "ORBITAL") and "TELEPORT" or "ORBITAL"
+    orbitalBtn.Text = State.evasionMode
+end)
+
+freezeBtn.MouseButton1Click:Connect(function()
+    State.freezeOthers = not State.freezeOthers
+    setToggleVisual(freezeTrack, freezeBall, State.freezeOthers)
+    if State.freezeOthers and State.masterEnabled then startFreeze() else stopFreeze() end
+end)
+
+flingBtn.MouseButton1Click:Connect(function()
+    State.flingEngine = not State.flingEngine
+    setToggleVisual(flingTrack, flingBall, State.flingEngine)
+    if State.flingEngine and State.masterEnabled then startFling() else stopFling() end
+end)
+
+antiDieBtn.MouseButton1Click:Connect(function()
+    local newState = not State.antiDieEnabled
+    setToggleVisual(antiDieTrack, antiDieBall, newState)
+    setAntiDie(newState)
+end)
+
+minimizeBtn.MouseButton1Click:Connect(function()
+    State.isMinimized = not State.isMinimized
+    minimizeBtn.Text = State.isMinimized and "+" or "–"
+    TweenService:Create(mainFrame, TweenInfo.new(0.22, Enum.EasingStyle.Quad), {
+        Size = UDim2.new(0, 300, 0, State.isMinimized and MINI_HEIGHT or FULL_HEIGHT)
+    }):Play()
+end)
+
+local dragInfo = {active = false}
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragInfo.active = true
+        dragInfo.start = input.Position
+        dragInfo.startPos = mainFrame.Position
+    end
+end)
+mainFrame.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInfo.input = input
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInfo.input and dragInfo.active then
+        local delta = input.Position - dragInfo.start
+        mainFrame.Position = UDim2.new(dragInfo.startPos.X.Scale, dragInfo.startPos.X.Offset + delta.X, dragInfo.startPos.Y.Scale, dragInfo.startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragInfo.active = false
+    end
+end)
+
+LocalPlayer.CharacterAdded:Connect(function(character)
+    task.wait(0.5)
+    if State.antiDieEnabled and State.masterEnabled then protectCharacter(character) end
+    if State.antiBatActive and State.masterEnabled then startAntiBat() end
+end)
+
+if LocalPlayer.Character and State.antiDieEnabled then protectCharacter(LocalPlayer.Character) end
+
+updateStatus()
